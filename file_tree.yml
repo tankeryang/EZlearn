@@ -1,0 +1,22 @@
+# 注意：带'-'的表示文件，不带'-'的表示文件夹
+
+ml-basic-platform: 项目主目录
+  config: 配置文件，包括presto配置，模型参数文件，和预加载的包
+    - parameters.py: 模型参数字典，pandas数据类型(dtypes)字典
+    - preprocessor.py: sklearn预处理类
+    - presto_prod.config: presto配置文件(user=prod)
+  input: 前期用于训练的离线文件，不会push到gitlab
+  output: 模型输出文件
+  log: 训练日志和定时调度的日志
+  module: 自定义的一些模块，功能函数
+    - const.py: python实现的常量类型(无用)
+    - DataAnalyzer.py: 数据分析工具类
+    - DBUtils.py: 数据库工具类
+    - FeatureGenerator.py: 特征生成工具类
+    - FeatureSelector.py: 特征分析&选择工具类
+    - RouteChain.py: RouteChain类，实现动态路由，用于 flask url 路由
+    - TrainerBase.py: 训练脚本基础类
+    - Visualizer.py: 可视化工具类
+  train: 训练脚本，和.ipynb文件
+  test: 测试文件
+  

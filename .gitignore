@@ -1,0 +1,16 @@
+.DS_Store
+__pycache__/
+*/__pycache__/
+.idea/
+.ipynb_checkpoints/
+.vscode/
+nohup.out
+input/*.pkl
+*.jpg
+*.ipynb
+*.csv
+*.txt
+input/*.csv
+train/mms/*.txt
+train/mms/*.ipynb
+test/train/*.txt
