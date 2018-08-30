@@ -14,6 +14,7 @@ class Visualizer():
         df[col_name].plot(kind=kind, figsize=(20, 12))
 
 
+    @classmethod
     def corrmat(df, col_names=[]):
         if len(col_names) < 2:
             raise Exception("Please provide at least 2 col_names! e.g. ['col_1', 'col_2']")

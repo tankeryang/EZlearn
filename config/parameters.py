@@ -2,179 +2,97 @@ import numpy as np
 
 
 REG_PARAMS = {
-    'GBR_CV': {
-        'n_estimators': np.arange(100, 500, 100),
-        'loss': ["ls", "lad", "huber", "quantile"],
-        'learning_rate': [1e-3, 1e-2, 1e-1, 0.5, 1.],
-        'max_depth': range(3, 11),
-        'min_samples_split': range(2, 6),
-        'min_samples_leaf': range(1, 6),
-        'subsample': np.arange(0.05, 1.01, 0.05),
-        'max_features': np.arange(0.05, 1.01, 0.05),
-        'alpha': [0.75, 0.8, 0.85, 0.9, 0.95, 0.99]
+    'MMS': {
+
+        'STORE_SC_WEEK': {
+            'LGB': {
+                'objective': 'regression',
+                'boosting': 'dart',
+        #         'max_depth': 10,
+                'num_leaves': 70,
+                'min_data_in_leaf': 50,
+                'max_cat_threshold': 200,
+                'learning_rate': 0.05,
+                'feature_fraction': 0.4,
+                'bagging_fraction': 0.8,
+                'bagging_freq': 10,
+                'bagging_seed': 2**7,
+                'drop_rate': 0.01,
+                'uniform_drop': True,
+                'max_drop': 10,
+                'lambda_l2': 1.2,
+                'metric': ['l2', 'l2_root', 'huber'],
+                'save_binary': True,
+                'num_threads': 16
+            }
+        },
+
+        'REGION_SKC_WEEK': {
+            'LGB': {
+                'objective': 'regression',
+                # 'max_depth': 10,
+                'num_leaves': 70,
+                'min_data_in_leaf': 150,
+                'max_cat_threshold': 200,
+                'learning_rate': 0.05,
+                'feature_fraction': 0.8,
+                'bagging_fraction': 0.8,
+                'bagging_freq': 10,
+                'bagging_seed': 2**7,
+                'metric': ['l2', 'l2_root', 'huber'],
+                'save_binary': True,
+                'num_threads': 16
+            }
+        },
+
+        'GBR_CV': {
+            'n_estimators': np.arange(100, 500, 100),
+            'loss': ["ls", "lad", "huber", "quantile"],
+            'learning_rate': [1e-3, 1e-2, 1e-1, 0.5, 1.],
+            'max_depth': range(3, 11),
+            'min_samples_split': range(2, 6),
+            'min_samples_leaf': range(1, 6),
+            'subsample': np.arange(0.05, 1.01, 0.05),
+            'max_features': np.arange(0.05, 1.01, 0.05),
+            'alpha': [0.75, 0.8, 0.85, 0.9, 0.95, 0.99]
+        },
+
+        'GBR': {
+            'n_estimators': 250,
+            'loss': 'ls',
+            'learning_rate': 0.05,
+            'max_depth': 5,
+            'min_samples_splits': 2,
+            'min_samples_leaf': 1,
+            'subsample': 1.0,
+            'max_features': None
+        },
+
     },
-    'GBR': {
-        'n_estimators': 250,
-        'loss': 'ls',
-        'learning_rate': 0.05,
-        'max_depth': 5,
-        'min_samples_splits': 2,
-        'min_samples_leaf': 1,
-        'subsample': 1.0,
-        'max_features': None
-    },
-    'LGB': {
-        'objective': 'regression',
-#         'max_depth': 10,
-        'num_leaves': 70,
-        'min_data_in_leaf': 150,
-        'max_cat_threshold': 200,
-        'learning_rate': 0.05,
-        'feature_fraction': 0.8,
-        'bagging_fraction': 0.8,
-        'bagging_freq': 10,
-        'bagging_seed': 2**7,
-        'metric': ['l2', 'l2_root', 'huber'],
-        'save_binary': True,
-        'num_threads': 16
+
+    'MMS_STORE_DALIY_SALES_AMOUNT': {
+
     }
 }
 
 
-DTYPE_PARAMS = {
-    'store_code': str,
-    'skc_code': str,
-    'year_code': str,
-    'week_code': 'category',
-    'year_week_code': str,
-    'prev_year_week_code': str,
-    'interval_weeks_to_prev': np.int16,
-    'list_dates_year_code': str,
-    'list_dates_week_code': str,
-    'list_dates_year_week_code': str,
-    'interval_weeks_to_list': np.int16,
-    'city_name': 'category',
-    'area_code': 'category',
-    'sales_channel': 'category',
-    'store_type': 'category',
-    'store_level': 'category',
-    'store_retail_amount_mean_8weeks': np.float32,
-    'store_sales_amount_mean_8weeks': np.float32,
-    'main_cate': 'category',
-    'sub_cate': 'category',
-    'leaf_cate': 'category',
-    'color_code': 'category',
-    'lining': 'category',
-    'customer_level_1_proportion_last_week': np.float32,
-    'customer_level_2_proportion_last_week': np.float32,
-    'customer_level_3_proportion_last_week': np.float32,
-    'special_day_type': 'category',
-    'weather_day_most': 'category',
-    'weather_night_most': 'category',
-    'tempreture_day_highest': np.int8,
-    'tempreture_day_avg': np.float16,
-    'tempreture_day_lowest': np.int8,
-    'tempreture_day_gap': np.float16,
-    'tempreture_night_highest': np.int8,
-    'tempreture_night_avg': np.float16,            
-    'tempreture_night_lowest': np.int8,
-    'tempreture_night_gap': np.float16,
-    'tempreture_avg_gap': np.float16,
-    'retail_amount_mean': np.float32,
-    'retail_amount_mean_gap_with_store': np.float32,
-    'sales_amount_mean': np.float32,
-    'sales_amount_mean_gap_with_store': np.float32,
-    'discount_rate_mean_last_4week': np.float32,
-    'discount_rate_mean_last_3week': np.float32,
-    'discount_rate_mean_last_2week': np.float32,
-    'discount_rate_mean_last_week': np.float32,
-    'discount_rate_mean': np.float32,
-    'discount_rate_mean_change_rate': np.float32,
-    'skc_con_sale_rate_last_week': np.float32,
-    'skc_con_sale_rate': np.float32,
-    'sales_qty_last_2week': np.int16,
-    'sales_qty_last_week': np.int16,
-    'sales_qty_last_week_and_last_2week_gap': np.int8,
-    'sales_qty': np.int16
-}
-
-
-ALLOCATE_DTYPE_PARAMS = {
-    'area_code': 'category',
-    'city_name': 'category',
-    'color_code': 'category',
-    'sub_cate': 'category',
-    'leaf_cate': 'category',
-    'lining': 'category',
-    'special_day_type': 'category',
-    'store_level': 'category',
-    'store_type': 'category',
-    'weather_day_most': 'category',
-    'weather_night_most': 'category',
-    'week_code': 'category',
-    'special_day_type': 'category',
-    'store_retail_amount_mean_8weeks': np.float32,
-    'store_sales_amount_mean_8weeks': np.float32,
-    'customer_level_1_proportion_last_week': np.float32,
-    'customer_level_2_proportion_last_week': np.float32,
-    'customer_level_3_proportion_last_week': np.float32,
-    'tempreture_day_highest': np.int8,
-    'tempreture_day_avg': np.float16,
-    'tempreture_day_lowest': np.int8,
-    'tempreture_day_gap': np.float16,
-    'tempreture_night_highest': np.int8,
-    'tempreture_night_avg': np.float16,            
-    'tempreture_night_lowest': np.int8,
-    'tempreture_night_gap': np.float16,
-    'tempreture_avg_gap': np.float16,
-    'retail_amount_mean': np.float32,
-    'retail_amount_mean_gap_with_store': np.float32,
-    'sales_amount_mean': np.float32,
-    'sales_amount_mean_gap_with_store': np.float32,
-}
-
-
-TRANSFORM_DTYPE_PARAMS = {
-    'week_code': 'category',
-    'interval_weeks_to_prev': np.int16,
-    'interval_weeks_to_list': np.int16,
-    'city_name': 'category',
-    'area_code': 'category',
-    'store_type': 'category',
-    'store_level': 'category',
-    'store_retail_amount_mean_8weeks': np.float32,
-    'store_sales_amount_mean_8weeks': np.float32,
-    'sub_cate': 'category',
-    'leaf_cate': 'category',
-    'color_code': 'category',
-    'lining': 'category',
-    'customer_level_1_proportion_last_week': np.float32,
-    'customer_level_2_proportion_last_week': np.float32,
-    'customer_level_3_proportion_last_week': np.float32,
-    'special_day_type': 'category',
-    'weather_day_most': 'category',
-    'weather_night_most': 'category',
-    'tempreture_day_highest': np.int8,
-    'tempreture_day_avg': np.float16,
-    'tempreture_day_lowest': np.int8,
-    'tempreture_day_gap': np.float16,
-    'tempreture_night_highest': np.int8,
-    'tempreture_night_avg': np.float16,
-    # 'tempreture_night_lowest': np.int8,
-    'tempreture_night_gap': np.float16,
-    'tempreture_avg_gap': np.float16,
-    'retail_amount_mean': np.float32,
-    'retail_amount_mean_gap_with_store': np.float32,
-    'sales_amount_mean': np.float32,
-    'sales_amount_mean_gap_with_store': np.float32,
-    'discount_rate_mean_last_4week': np.float32,
-    'discount_rate_mean_last_3week': np.float32,
-    'discount_rate_mean_last_2week': np.float32,
-    'discount_rate_mean_last_week': np.float32,
-    'discount_rate_mean': np.float32,
-    'discount_rate_mean_change_rate': np.float32,
-    'skc_con_sale_rate_last_week': np.float32,
-    'sales_qty_last_2week': np.int16,
-    'sales_qty_last_week': np.int16,
-    'sales_qty_last_week_and_last_2week_gap': np.int8
+CLF_PARAMS = {
+    'MMS': {
+        'LGB': {
+            'objective': 'multiclass',
+    #         'max_depth': 10,
+            'num_leaves': 70,
+            'min_data_in_leaf': 150,
+            'max_cat_threshold': 200,
+            'learning_rate': 0.05,
+            'feature_fraction': 0.8,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 5,
+            'bagging_seed': 2**7,
+            'metric': ['multi_logloss', 'multi_error', 'auc'],
+            'save_binary': True,
+            'num_threads': 16,
+            'num_class': 4
+        }
+    }
 }

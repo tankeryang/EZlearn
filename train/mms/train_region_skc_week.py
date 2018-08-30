@@ -13,7 +13,7 @@ from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit, train_
 # customer module
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from module import TrainerBase
-from config import DTYPE_PARAMS, REG_PARAMS, PROCESSOR
+from config import DTYPE_PARAMS, REG_PARAMS, PROCESSOR, READ_SQL
 warnings.filterwarnings('ignore')
 
 
@@ -28,59 +28,47 @@ class Trainer(TrainerBase):
         self.model = None
 
 
+    def logging(message):
+        def decorator(func):
+            def _func(self, *args, **kw):
+                self.logger.info('='*60)
+                self.logger.info(message)
+                self.logger.info('='*60)
+                func(self)
+                self.logger.info(message + ' complete!')
+            return _func
+        return decorator
+
+
+    @logging("Loading source data")
     def get_source_data(self):
         if self.args.training_type == 'online':
             presto_engin = create_engine('presto://prod@10.10.22.8:10300/prod_hive/ads_mms')
             con = presto_engin.connect()
 
             if self.args.training_model == 'allocate':
-                sql = """
-                    select * from ads_mms.training_data_store_skc_week_merge
-                    where store_level != 'D'
-                    and store_retail_amount_mean_8weeks is not null
-                    and store_sales_amount_mean_8weeks is not null
-                    and interval_weeks_to_list = 0
-                    and year_code >= '2017'
-                """
+                sql = READ_SQL['MMS']['REGION_SKC_WEEK']['ALLOCATE']
             elif self.args.training_model == 'transform':
-                sql = """
-                    select * from ads_mms.training_data_store_skc_week_merge
-                    -- where store_level != 'D'
-                    where store_retail_amount_mean_8week is not null
-                    and store_sales_amount_mean_8week is not null
-                    and tempreture_day_highest is not null
-                    and interval_weeks_to_list >= 1
-                    and year_code >= '2017'
-                """
+                sql = READ_SQL['MMS']['REGION_SKC_WEEK']['TRANSFORM']
             else:
                 logging.error("Unknown argument {}, Please use [allocate | transform]".format(self.args.training_model))
                 sys.exit(1)
-            
-            self.logger.info('='*60)
-            self.logger.info("Loading source data from presto...")
-            self.logger.info('='*60)
 
-            # 抽数&数据类型压缩
+            # 读数&数据类型压缩
             df_source_data = pd.read_sql_query(sql=sql, con=con)
-            for col in DTYPE_PARAMS['MMS']:
-                df_source_data[col] = df_source_data[col].astype(DTYPE_PARAMS['MMS'][col])
+            for col in DTYPE_PARAMS['MMS']['REGION_SKC_WEEK']:
+                df_source_data[col] = df_source_data[col].astype(DTYPE_PARAMS['MMS']['REGION_SKC_WEEK'][col])
 
         elif self.args.training_type == 'offline':
-            self.logger.info('='*60)
-            self.logger.info("Loading source data from local csv file...")
-            self.logger.info('='*60)
-
             df_source_data = pd.read_csv(
                 os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'input', arg)),
-                dtype=DTYPE_PARAMS['MMS'],
+                dtype=DTYPE_PARAMS['MMS']['REGION_SKC_WEEK'],
                 low_memory=False
             )
 
         else:
             logging.error("Unknown argument {}, Please use [online | offline]".format(self.args.training_type))
             sys.exit(1)
-
-        self.logger.info("Loading complete!")
 
         self.__df_source_data = df_source_data
 
@@ -117,7 +105,6 @@ class Trainer(TrainerBase):
                 df_useful_data.drop(
                     columns=[
                         'year_code', 'main_cate',
-                        'prev_year_week_code',
                         'list_dates_year_code',
                         'list_dates_week_code',
                         'list_dates_year_week_code'
@@ -132,10 +119,11 @@ class Trainer(TrainerBase):
         self.__df_useful_data = df_useful_data
 
 
+    @logging("Feature engineering...")
     def feature_engineering(self):
         # print(df_useful_data.shape)
         # 数据范围压缩
-        self.__df_useful_data['sales_qty'] = self.__df_useful_data['sales_qty'].clip(lower=0, upper=20)
+        self.__df_useful_data['sales_qty'] = self.__df_useful_data['sales_qty'].clip(lower=0, upper=30)
         # df_useful_data['interval_weeks_to_list'] = df_useful_data['interval_weeks_to_list'].clip(lower=0)
 
         self.__df_useful_data.dropna(axis='index', subset=['tempreture_day_avg'], inplace=True)
@@ -145,66 +133,63 @@ class Trainer(TrainerBase):
         # )
 
         # 小样本sms
-        df_useful_data_1_sms, _ = train_test_split(
-            self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='1'],
-            train_size=0.1, random_state=42
-        )
-        print(df_useful_data_1_sms.shape)
-        del _
-        gc.collect()
+        # df_useful_data_1_sms, _ = train_test_split(
+        #     self.__df_useful_data[self.__df_useful_data['sales_qty']==1],
+        #     train_size=0.5, random_state=42
+        # )
+        # print(df_useful_data_1_sms.shape)
+        # del _
+        # gc.collect()
 
-        df_useful_data_2_sms, _ = train_test_split(
-            self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='2'],
-            train_size=0.1, random_state=42
-        )
-        print(df_useful_data_2_sms.shape)
-        del _
-        gc.collect()
+        # df_useful_data_2_sms, _ = train_test_split(
+        #     self.__df_useful_data[self.__df_useful_data['sales_qty']==2],
+        #     train_size=0.5, random_state=42
+        # )
+        # print(df_useful_data_2_sms.shape)
+        # del _
+        # gc.collect()
 
-        df_useful_data_3_5_sms, _ = train_test_split(
-            self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='3-5'],
-            train_size=0.2, random_state=42
-        )
-        print(df_useful_data_3_5_sms.shape)
-        del _
-        gc.collect()
+        # df_useful_data_3_sms, _ = train_test_split(
+        #     self.__df_useful_data[self.__df_useful_data['sales_qty']==3],
+        #     train_size=0.5, random_state=42
+        # )
+        # print(df_useful_data_3_sms.shape)
+        # del _
+        # gc.collect()
 
-        self.__df_useful_data.drop(
-            index=self.__df_useful_data[
-                (self.__df_useful_data['sales_qty_type']=='1') | (self.__df_useful_data['sales_qty_type']=='2') | (self.__df_useful_data['sales_qty_type']=='3-5')
-            ].index,
-            inplace=True
-        )
+        # self.__df_useful_data.drop(
+        #     index=self.__df_useful_data[
+        #         (self.__df_useful_data['sales_qty']==1) | (self.__df_useful_data['sales_qty']==2) | (self.__df_useful_data['sales_qty']==3)
+        #     ].index,
+        #     inplace=True
+        # )
 
-        self.__df_useful_data = pd.concat([
-            df_useful_data_1_sms, df_useful_data_2_sms, df_useful_data_3_5_sms, self.__df_useful_data
-        ]).reset_index()
+        # self.__df_useful_data = pd.concat([
+        #     df_useful_data_1_sms, df_useful_data_2_sms, df_useful_data_3_sms, self.__df_useful_data
+        # ]).reset_index()
      
-        print(self.__df_useful_data.shape)
+        # print(self.__df_useful_data.shape)
 
 
+    @logging("Preprocessing df_useful_data...")
     def preprocessing(self):
-        self.logger.info('='*60)
-        self.logger.info("Preprocessing df_useful_data...")
-        self.logger.info('='*60)
-
         # 设置index
         df_data = self.__df_useful_data.copy()
-        df_data.set_index(['store_code', 'skc_code'], inplace=True)
+        df_data.set_index(['region_code', 'skc_code'], inplace=True)
 
         # 小样本之后的步骤
-        df_data.drop(['index'], axis='columns', inplace=True)
+        # df_data.drop(['index'], axis='columns', inplace=True)
         
         # 划分
-        df_train = df_data[df_data['year_week_code'] < '201821']
-        df_test = df_data[df_data['year_week_code'] >= '201821']
+        df_train = df_data[df_data['year_week_code'] < '201825']
+        df_test = df_data[df_data['year_week_code'] >= '201825']
 
         df_train_y = df_train.pop('sales_qty')
-        df_train.drop(columns=['year_week_code', 'sales_qty_type'], inplace=True)
+        df_train.drop(columns=['year_week_code'], inplace=True)
         df_test_y = df_test.pop('sales_qty')
-        df_test.drop(columns=['year_week_code', 'sales_qty_type'], inplace=True)
+        df_test.drop(columns=['year_week_code'], inplace=True)
         df_data_y = df_data.pop('sales_qty')
-        df_data.drop(columns=['year_week_code', 'sales_qty_type'], inplace=True)
+        df_data.drop(columns=['year_week_code'], inplace=True)
 
         # 获得数值型和类别型数据
         # num_cols = get_numeric_cols(df_train)
@@ -230,25 +215,20 @@ class Trainer(TrainerBase):
         self.logger.info('df_train_y shape: {}'.format(df_train_y.shape))
         self.logger.info('df_test_y shape: {}'.format(df_test_y.shape))
 
-        self.logger.info("Preprocessing complete!")
 
-
+    @logging("Test model by df_train_X/y(train data), df_test_X/y(valid data)...")
     def test_model(self):
-        self.logger.info('='*60)
-        self.logger.info("Test model by df_train_X/y(train data), df_test_X/y(valid data)...")
-        self.logger.info('='*60)
-
         # 加载数据至lgb.Dataset类型
         dtrain = lgb.Dataset(self.__df_train_test_data['df_train_X'], label=self.__df_train_test_data['df_train_y'])
         dtest = lgb.Dataset(self.__df_train_test_data['df_test_X'], label=self.__df_train_test_data['df_test_y'], reference=dtrain)
 
         # 训练
         bst = lgb.train(
-            params=REG_PARAMS['MMS']['LGB'],
+            params=REG_PARAMS['MMS']['REGION_SKC_WEEK']['LGB'],
             train_set=dtrain,
             valid_sets=[dtrain, dtest],
-            num_boost_round=1000,
-            early_stopping_rounds=600,
+            num_boost_round=500,
+            early_stopping_rounds=300,
             verbose_eval=50
         )
 
@@ -283,16 +263,13 @@ class Trainer(TrainerBase):
         self.__best_iteration = bst.best_iteration
 
 
+    @logging("Train by df_data_X/y(all training data) and save model...")
     def get_model(self):
-        self.logger.info('='*60)
-        self.logger.info("Train by df_data_X/y(all training data) and save model...")
-        self.logger.info('='*60)
-
         # 加载数据至lgb.Dataset类型
         dtrain = lgb.Dataset(self.__df_train_test_data['df_data_X'], label=self.__df_train_test_data['df_data_y'])
 
         bst = lgb.train(
-            params=REG_PARAMS['MMS']['LGB'],
+            params=REG_PARAMS['MMS']['REGION_SKC_WEEK']['LGB'],
             train_set=dtrain,
             num_boost_round=self.__best_iteration,
             valid_sets=[dtrain],
@@ -328,11 +305,12 @@ class Trainer(TrainerBase):
         self.model = bst
 
 
+    @logging("Saving model file...")
     def save_model(self):
         if self.model is None:
             pass
         else:
-            model_file_name = 'model_{}_{}_{}.txt'.format(
+            model_file_name = 'model_{}_{}_{}_region_skc_week.txt'.format(
                 self.args.solution_type, self.args.project, self.args.training_model
             )
             model_file = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'output', model_file_name))

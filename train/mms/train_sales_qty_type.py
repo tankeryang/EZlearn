@@ -8,12 +8,12 @@ import pandas as pd
 import numpy as np
 import lightgbm as lgb
 from sqlalchemy import create_engine
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit, train_test_split
 # customer module
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from module import TrainerBase
-from config import DTYPE_PARAMS, REG_PARAMS, PROCESSOR
+from config import DTYPE_PARAMS, CLF_PARAMS, PROCESSOR
 warnings.filterwarnings('ignore')
 
 
@@ -145,19 +145,11 @@ class Trainer(TrainerBase):
         # )
 
         # 小样本sms
-        df_useful_data_1_sms, _ = train_test_split(
-            self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='1'],
-            train_size=0.1, random_state=42
+        df_useful_data_1_2_sms, _ = train_test_split(
+            self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='1-2'],
+            train_size=0.05, random_state=42
         )
-        print(df_useful_data_1_sms.shape)
-        del _
-        gc.collect()
-
-        df_useful_data_2_sms, _ = train_test_split(
-            self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='2'],
-            train_size=0.1, random_state=42
-        )
-        print(df_useful_data_2_sms.shape)
+        self.logger.info("type 1-2: {}".format(df_useful_data_1_2_sms.shape))
         del _
         gc.collect()
 
@@ -165,19 +157,19 @@ class Trainer(TrainerBase):
             self.__df_useful_data[self.__df_useful_data['sales_qty_type']=='3-5'],
             train_size=0.2, random_state=42
         )
-        print(df_useful_data_3_5_sms.shape)
+        self.logger.info("type 3-5: {}".format(df_useful_data_3_5_sms.shape))
         del _
         gc.collect()
 
         self.__df_useful_data.drop(
             index=self.__df_useful_data[
-                (self.__df_useful_data['sales_qty_type']=='1') | (self.__df_useful_data['sales_qty_type']=='2') | (self.__df_useful_data['sales_qty_type']=='3-5')
+                (self.__df_useful_data['sales_qty_type']=='1-2') | (self.__df_useful_data['sales_qty_type']=='3-5')
             ].index,
             inplace=True
         )
 
         self.__df_useful_data = pd.concat([
-            df_useful_data_1_sms, df_useful_data_2_sms, df_useful_data_3_5_sms, self.__df_useful_data
+            df_useful_data_1_2_sms, df_useful_data_3_5_sms, self.__df_useful_data
         ]).reset_index()
      
         print(self.__df_useful_data.shape)
@@ -193,18 +185,22 @@ class Trainer(TrainerBase):
         df_data.set_index(['store_code', 'skc_code'], inplace=True)
 
         # 小样本之后的步骤
-        df_data.drop(['index'], axis='columns', inplace=True)
+        df_data.drop(columns=['index'], inplace=True)
+
+        # 类型编码
+        self.__le = PROCESSOR['LE']
+        df_data['sales_qty_type'] = self.__le.fit_transform(df_data['sales_qty_type'])
         
         # 划分
         df_train = df_data[df_data['year_week_code'] < '201821']
         df_test = df_data[df_data['year_week_code'] >= '201821']
 
-        df_train_y = df_train.pop('sales_qty')
-        df_train.drop(columns=['year_week_code', 'sales_qty_type'], inplace=True)
-        df_test_y = df_test.pop('sales_qty')
-        df_test.drop(columns=['year_week_code', 'sales_qty_type'], inplace=True)
-        df_data_y = df_data.pop('sales_qty')
-        df_data.drop(columns=['year_week_code', 'sales_qty_type'], inplace=True)
+        df_train_y = df_train.pop('sales_qty_type')
+        df_train.drop(columns=['year_week_code', 'sales_qty'], inplace=True)
+        df_test_y = df_test.pop('sales_qty_type')
+        df_test.drop(columns=['year_week_code', 'sales_qty'], inplace=True)
+        df_data_y = df_data.pop('sales_qty_type')
+        df_data.drop(columns=['year_week_code', 'sales_qty'], inplace=True)
 
         # 获得数值型和类别型数据
         # num_cols = get_numeric_cols(df_train)
@@ -244,25 +240,36 @@ class Trainer(TrainerBase):
 
         # 训练
         bst = lgb.train(
-            params=REG_PARAMS['MMS']['LGB'],
+            params=CLF_PARAMS['MMS']['LGB'],
             train_set=dtrain,
             valid_sets=[dtrain, dtest],
-            num_boost_round=1000,
-            early_stopping_rounds=600,
-            verbose_eval=50
+            num_boost_round=50,
+            early_stopping_rounds=10,
+            verbose_eval=5
         )
 
         # 打印指标
-        y_pred = bst.predict(self.__df_train_test_data['df_test_X'], num_iteration=bst.best_iteration or 1000)
+        y_pred_prop = bst.predict(self.__df_train_test_data['df_test_X'], num_iteration=bst.best_iteration or 1000)
+        y_pred = []
+        for prop_array in y_pred_prop:
+            prop_list = prop_array.tolist()
+            y_pred.append(prop_list.index(max(prop_list)))
+
+        df_metrics = pd.DataFrame()
+        df_metrics['y_true'] = self.__df_train_test_data['df_test_y']
+        df_metrics['y_pred'] = y_pred
 
         self.logger.info("Evaluation by valid data:")
-        self.logger.info(
-            "r2: {:.3f}, mse: {:.3f}, mae: {:.3f}".format(
-                r2_score(self.__df_train_test_data['df_test_y'].values, y_pred),
-                mean_squared_error(self.__df_train_test_data['df_test_y'].values, y_pred),
-                mean_absolute_error(self.__df_train_test_data['df_test_y'].values, y_pred)
+
+        for label in self.__df_train_test_data['df_test_y'].unique():
+            df_metrics_label = df_metrics[df_metrics['y_true']==label]
+            self.logger.info(
+                "{} -- f1: {}".format(
+                    list(self.__le.inverse_transform([label]))[0],
+                    f1_score(df_metrics_label['y_true'], df_metrics_label['y_pred'], average='micro')
+                )
             )
-        )
+
         self.logger.info(60*'-')
 
         fm_s = dict(zip(self.__df_train_test_data['df_train_X'].columns.tolist(), list(bst.feature_importance(importance_type='split'))))
@@ -292,22 +299,35 @@ class Trainer(TrainerBase):
         dtrain = lgb.Dataset(self.__df_train_test_data['df_data_X'], label=self.__df_train_test_data['df_data_y'])
 
         bst = lgb.train(
-            params=REG_PARAMS['MMS']['LGB'],
+            params=CLF_PARAMS['MMS']['LGB'],
             train_set=dtrain,
             num_boost_round=self.__best_iteration,
             valid_sets=[dtrain],
-            verbose_eval=50
+            verbose_eval=5
         )
 
-        y_pred = bst.predict(self.__df_train_test_data['df_data_X'], num_iteration=bst.best_iteration)
-        self.logger.info("Evaluation by all data:")
-        self.logger.info(
-            "r2: {:.3f}, mse: {:.3f}, mae: {:.3f}".format(
-                r2_score(self.__df_train_test_data['df_data_y'].values, y_pred),
-                mean_squared_error(self.__df_train_test_data['df_data_y'].values, y_pred),
-                mean_absolute_error(self.__df_train_test_data['df_data_y'].values, y_pred)
+        # 打印指标
+        y_pred_prop = bst.predict(self.__df_train_test_data['df_test_X'], num_iteration=bst.best_iteration or 1000)
+        y_pred = []
+        for prop_array in y_pred_prop:
+            prop_list = prop_array.tolist()
+            y_pred.append(prop_list.index(max(prop_list)))
+
+        df_metrics = pd.DataFrame()
+        df_metrics['y_true'] = self.__df_train_test_data['df_test_y']
+        df_metrics['y_pred'] = y_pred
+
+        self.logger.info("Evaluation by valid data:")
+
+        for label in self.__df_train_test_data['df_test_y'].unique():
+            df_metrics_label = df_metrics[df_metrics['y_true']==label]
+            self.logger.info(
+                "{} -- f1: {}".format(
+                    list(self.__le.inverse_transform([label]))[0],
+                    f1_score(df_metrics_label['y_true'], df_metrics_label['y_pred'], average='micro')
+                )
             )
-        )
+
         self.logger.info(60*'-')
 
         fm_s = dict(zip(self.__df_train_test_data['df_data_X'].columns.tolist(), list(bst.feature_importance(importance_type='split'))))
